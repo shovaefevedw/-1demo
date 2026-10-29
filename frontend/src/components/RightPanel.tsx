@@ -1,4 +1,4 @@
-import type { ColorMode, Projection, Settings } from "../lib/types";
+import type { Settings } from "../lib/types";
 import { formatCount } from "../lib/format";
 
 type Props = {
@@ -8,6 +8,7 @@ type Props = {
   onChange: (patch: Partial<Settings>) => void;
   onReset: () => void;
   onDownloadDepth: () => void;
+  onDownloadPhoto: () => void;
   onDownloadPly: () => void;
   onDownloadXyz: () => void;
   onDownloadAll: () => void;
@@ -20,6 +21,7 @@ export default function RightPanel({
   onChange,
   onReset,
   onDownloadDepth,
+  onDownloadPhoto,
   onDownloadPly,
   onDownloadXyz,
   onDownloadAll,
@@ -107,6 +109,15 @@ export default function RightPanel({
           onChange={(maxPoints) => onChange({ maxPoints })}
         />
         <Slider
+          label="Dot Contrast"
+          min={0.5}
+          max={3}
+          step={0.1}
+          value={settings.dotContrast}
+          display={settings.dotContrast.toFixed(1)}
+          onChange={(dotContrast) => onChange({ dotContrast })}
+        />
+        <Slider
           label="Point Opacity"
           min={0.15}
           max={1}
@@ -115,22 +126,15 @@ export default function RightPanel({
           display={settings.opacity.toFixed(2)}
           onChange={(opacity) => onChange({ opacity })}
         />
-        <div className="grid grid-cols-2 gap-1 rounded-lg bg-black/30 p-1">
-          <Toggle
-            active={settings.colorMode === "rgb"}
-            label="RGB"
-            onClick={() => onChange({ colorMode: "rgb" satisfies ColorMode })}
+        <label className="flex items-center justify-between text-xs text-zinc-300">
+          Dot Color
+          <input
+            type="color"
+            value={settings.dotColor}
+            onChange={(event) => onChange({ dotColor: event.target.value })}
+            className="h-7 w-10 cursor-pointer bg-transparent"
           />
-          <Toggle
-            active={settings.colorMode === "depth"}
-            label="Depth"
-            onClick={() => onChange({ colorMode: "depth" satisfies ColorMode })}
-          />
-        </div>
-      </section>
-
-      <section className="space-y-3">
-        <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-500">Display</p>
+        </label>
         <label className="flex items-center justify-between text-xs text-zinc-300">
           Background
           <input
@@ -140,27 +144,10 @@ export default function RightPanel({
             className="h-7 w-10 cursor-pointer bg-transparent"
           />
         </label>
-        <Slider
-          label="Camera FOV"
-          min={30}
-          max={80}
-          step={1}
-          value={settings.fov}
-          display={`${Math.round(settings.fov)}°`}
-          onChange={(fov) => onChange({ fov })}
-        />
-        <div className="grid grid-cols-2 gap-1 rounded-lg bg-black/30 p-1">
-          <Toggle
-            active={settings.projection === "perspective"}
-            label="Perspective"
-            onClick={() => onChange({ projection: "perspective" satisfies Projection })}
-          />
-          <Toggle
-            active={settings.projection === "orthographic"}
-            label="Orthographic"
-            onClick={() => onChange({ projection: "orthographic" satisfies Projection })}
-          />
-        </div>
+        <p className="text-[11px] leading-relaxed text-zinc-500">
+          Dots are circles. Dot Contrast widens the size gap between near and far.
+          Dot Color tints them; nearer dots stay brighter, farther dots stay darker.
+        </p>
         <button
           type="button"
           onClick={onReset}
@@ -173,6 +160,7 @@ export default function RightPanel({
       <section className="mt-auto space-y-2">
         <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-500">Export</p>
         <ExportButton disabled={!canExport || exporting} label="Download 16-bit Depth PNG" onClick={onDownloadDepth} />
+        <ExportButton disabled={!canExport || exporting} label="Download Point Photo" onClick={onDownloadPhoto} />
         <ExportButton disabled={!canExport || exporting} label="Download PLY" onClick={onDownloadPly} />
         <ExportButton disabled={!canExport || exporting} label="Download XYZ" onClick={onDownloadXyz} />
         <ExportButton disabled={!canExport || exporting} label="Download All Results" onClick={onDownloadAll} />
@@ -213,18 +201,6 @@ function Slider({
         onChange={(event) => onChange(Number(event.target.value))}
       />
     </label>
-  );
-}
-
-function Toggle({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-md px-2 py-1.5 text-xs ${active ? "bg-zinc-100 text-zinc-950" : "text-zinc-300 hover:bg-white/5"}`}
-    >
-      {label}
-    </button>
   );
 }
 

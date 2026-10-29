@@ -3,7 +3,12 @@
 import cv2
 import numpy as np
 
-from app.services.depth_processing import normalize_to_uint16, refine_depth
+from app.services.depth_processing import (
+    fuse_order_and_detail,
+    normalize_to_uint16,
+    refine_depth,
+    shape_front_back_order,
+)
 from app.services.exporting import write_gray16_png, write_preview_png
 
 
@@ -79,3 +84,27 @@ def test_guided_filter_keeps_a_color_aligned_edge():
     assert refined.shape == disparity.shape
     assert np.isfinite(refined).all()
     assert refined[:, 18:].mean() - refined[:, :6].mean() > 0.45
+
+
+def test_object_edges_ramp_without_losing_order():
+    disparity = np.zeros((48, 64), dtype=np.float32)
+    disparity[:, 32:] = 1.0
+    disparity[10:18, 6:14] = 0.04
+    ordered = shape_front_back_order(disparity)
+    row = ordered[24]
+    assert ordered[:, :8].mean() < 0.12
+    assert ordered[:, -8:].mean() > 0.88
+    assert 0.025 < ordered[14, 10] < 0.2
+    assert np.diff(row).max() < 0.45
+    assert np.count_nonzero((row > 0.2) & (row < 0.8)) >= 3
+    assert np.all(np.diff(row) >= -0.02)
+
+
+def test_fuse_keeps_order_and_a_local_feature():
+    order = np.zeros((40, 60), dtype=np.float32)
+    order[:, 30:] = 1.0
+    detail = order.copy()
+    detail[16:24, 8:16] = 0.35
+    fused = fuse_order_and_detail(order, detail)
+    assert fused[:, :6].mean() < fused[:, -6:].mean()
+    assert fused[20, 12] > fused[20, 2] + 0.02

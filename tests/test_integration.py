@@ -61,7 +61,7 @@ def test_sample_photograph_becomes_a_colored_cloud(client, tmp_path):
             "depth_strength": 1.0,
             "max_points": 500000,
             "density": 1.0,
-            "color_mode": "rgb",
+            "color_mode": "depth",
             "fov_deg": 55,
         },
     )
@@ -83,6 +83,8 @@ def test_sample_photograph_becomes_a_colored_cloud(client, tmp_path):
     assert np.all(points[:, 2] > 0)
     assert colors.min() >= 0 and colors.max() <= 1
     assert colors.std() > 0.01
+    assert np.allclose(colors[:, 0], colors[:, 1], atol=1 / 255)
+    assert np.allclose(colors[:, 1], colors[:, 2], atol=1 / 255)
 
     metadata = client.get(info["files"]["metadata"]).json()
     assert metadata["units"] == "unitless_relative_not_meters"

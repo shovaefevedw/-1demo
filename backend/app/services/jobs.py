@@ -107,6 +107,7 @@ class JobStore:
         for name in (
             "depth_16bit.png",
             "depth_preview.png",
+            "pointcloud.png",
             "pointcloud.ply",
             "pointcloud.xyz",
             "metadata.json",

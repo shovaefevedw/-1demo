@@ -3,6 +3,7 @@
 import io
 import uuid
 
+import cv2
 import numpy as np
 from PIL import Image
 
@@ -69,32 +70,34 @@ def test_preview_and_export_roundtrip(client):
         "fov_deg": 90.0,
         "max_points": 100000,
         "density": 1.0,
-        "color_mode": "rgb",
+        "color_mode": "depth",
     }
     preview = client.post("/api/preview", json=settings)
     assert preview.status_code == 200
     count = int(preview.headers["X-Point-Count"])
     blob = preview.content
-    assert count == 6 * 8
-    assert len(blob) == 4 + count * 12 + count * 3
-    colors = np.frombuffer(blob, dtype=np.uint8, offset=4 + count * 12)
-    assert colors.reshape(-1, 3)[2 * 8 + 5].tolist() == [7, 8, 9]
+    assert 0 < count <= 6 * 8
+    assert blob.startswith(b"\x89PNG")
+    photo = cv2.imdecode(np.frombuffer(blob, dtype=np.uint8), cv2.IMREAD_COLOR)
+    assert photo.shape[:2] == (6, 8)
+    assert photo.ndim == 3
 
     exported = client.post("/api/pointcloud", json=settings)
     assert exported.status_code == 200
     body = exported.json()
-    assert body["point_count"] == count
+    assert body["point_count"] == 6 * 8
     ply = client.get(body["files"]["pointcloud_ply"])
     assert ply.status_code == 200
     assert ply.content.startswith(b"ply")
     metadata_response = client.get(body["files"]["metadata"])
     payload = metadata_response.json()
     assert payload["virtual_depth"]["units"] == "virtual_scene_units_not_meters"
-    assert payload["point_count"] == count
+    assert payload["point_count"] == 6 * 8
     assert "meters" not in payload["virtual_depth"]["mapping"]
 
     expected = reconstruct(disparity, rgb, CameraSettings(near=1, far=3, fov_deg=90, max_points=100000))
-    assert expected.point_count == count
+    assert expected.point_count == 6 * 8
+    assert expected.depth_info["photo_points"] == count
     left_z = expected.xyz[expected.xyz[:, 0] < 0, 2].mean()
     right_z = expected.xyz[expected.xyz[:, 0] > 0, 2].mean()
     assert right_z < left_z

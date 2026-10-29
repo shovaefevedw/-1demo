@@ -16,9 +16,9 @@ type Props = {
 };
 
 const MODELS: { id: ModelName; label: string; note: string }[] = [
-  { id: "small", label: "Small", note: "Recommended" },
-  { id: "base", label: "Base", note: "More detail" },
-  { id: "large", label: "Large", note: "Heavy" },
+  { id: "small", label: "V2 Small", note: "Fast volume" },
+  { id: "base", label: "V2 Base", note: "Clearer shape" },
+  { id: "large", label: "V2 Large", note: "Sharpest shape" },
 ];
 
 export default function LeftPanel({
@@ -130,7 +130,8 @@ export default function LeftPanel({
           ))}
         </div>
         <p className="mt-2 text-[11px] leading-relaxed text-zinc-500">
-          Depth Anything V2 relative disparity. Small is the reliable default on Apple Silicon.
+          V2 Large keeps the subject’s shape most clearly. Depth Pro was removed:
+          its depth did not follow the photograph and smeared the picture together.
         </p>
       </div>
 

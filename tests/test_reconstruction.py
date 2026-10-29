@@ -1,4 +1,4 @@
-"""Pixel projection, color preservation, and PLY export."""
+"""Pixel projection, depth shading, and PLY export."""
 
 import numpy as np
 import open3d as o3d
@@ -17,7 +17,7 @@ def _settings(**overrides) -> CameraSettings:
         smoothing=0.0,
         density=1.0,
         max_points=100_000,
-        color_mode="rgb",
+        color_mode="depth",
         fov_deg=90.0,
     )
     values.update(overrides)
@@ -36,7 +36,7 @@ def test_intrinsics_and_hand_projection():
     disparity = np.zeros((4, 4), dtype=np.float32)
     disparity[1, 3] = 1.0
     result = reconstruct(disparity, rgb, _settings())
-    target = result.xyz[(result.rgb == np.array([10, 20, 30])).all(axis=1)][0]
+    target = result.xyz[np.argmin(result.xyz[:, 2])]
     z = 1.0
     expected_x = (3 - 1.5) * z / 2.0
     expected_y = -(1 - 1.5) * z / 2.0
@@ -55,7 +55,8 @@ def test_foreground_is_closer_until_inverted():
     assert result.xyz[0, 2] == pytest.approx(3.0)
     assert result.xyz[1, 2] == pytest.approx(1.0)
     assert result.xyz[1, 2] < result.xyz[0, 2]
-    assert result.rgb[3].tolist() == [9, 8, 7]
+    assert result.rgb[1].tolist() == [255, 255, 255]
+    assert result.rgb[0].tolist() == [0, 0, 0]
     assert result.point_count == 4
     assert result.point_count <= disparity.size
 
@@ -113,11 +114,82 @@ def test_ply_and_xyz_keep_coordinates_and_colors(tmp_path):
     assert points.shape == (4, 3)
     assert colors.shape == (4, 3)
     assert np.allclose(points, result.xyz, atol=1e-5)
-    assert np.allclose(colors[1], np.array([12, 34, 56]) / 255.0)
+    assert np.allclose(colors[:, 0], colors[:, 1])
+    assert np.allclose(colors[:, 1], colors[:, 2])
+    nearest = int(np.argmin(points[:, 2]))
+    assert np.allclose(colors[nearest], 1.0)
+    assert not np.allclose(colors[nearest], np.array([12, 34, 56]) / 255.0)
 
     text = xyz_path.read_text(encoding="utf-8")
-    assert "12 34 56" in text
+    assert "255 255 255" in text
+    assert "12 34 56" not in text
     assert "not meters" in text
+
+
+def test_point_photo_stays_flat_and_grows_near_dots():
+    disparity = np.full((48, 64), np.nan, dtype=np.float32)
+    disparity[24, 10] = 1.0
+    disparity[24, 50] = 0.0
+    rgb = np.zeros((48, 64, 3), dtype=np.uint8)
+    rgb[24, 10] = (255, 0, 0)
+    result = reconstruct(
+        disparity,
+        rgb,
+        _settings(point_size=4, background="#000000", max_points=1000),
+    )
+    photo = result.photo
+    assert photo.shape == (48, 64, 3)
+    assert photo[24, 10].mean() > photo[24, 50].mean() + 40
+    assert not np.any(np.all(photo == (255, 0, 0), axis=2))
+    near_marks = np.count_nonzero(photo[:, :32].max(axis=2) > 20)
+    far_marks = np.count_nonzero(photo[:, 32:].max(axis=2) > 20)
+    assert near_marks > far_marks * 2
+
+
+def test_dots_are_round_tinted_and_more_contrasted():
+    disparity = np.full((72, 96), np.nan, dtype=np.float32)
+    disparity[36, 24] = 1.0
+    disparity[36, 72] = 0.0
+    rgb = np.zeros((72, 96, 3), dtype=np.uint8)
+    mild = reconstruct(
+        disparity,
+        rgb,
+        _settings(point_size=3, dot_contrast=1, dot_color="#ff0000", background="#000000"),
+    )
+    strong = reconstruct(
+        disparity,
+        rgb,
+        _settings(point_size=3, dot_contrast=2.5, dot_color="#ff0000", background="#000000"),
+    )
+    photo = mild.photo
+    assert photo[36, 24, 0] > photo[36, 24, 1] + 40
+    assert photo[36, 24, 1] < 40
+    # A circle leaves the diagonal corner empty. A diamond of the same radius fills it.
+    disk = photo[36 - 10 : 36 + 11, 24 - 10 : 24 + 11, 0]
+    axis = disk[10, 10 + 3]
+    corner = disk[10 + 7, 10 + 7]
+    assert axis > 80
+    assert corner < axis * 0.45
+    near_mild = np.count_nonzero(mild.photo[:, :48, 0] > 30)
+    far_mild = np.count_nonzero(mild.photo[:, 48:, 0] > 30)
+    near_strong = np.count_nonzero(strong.photo[:, :48, 0] > 30)
+    far_strong = np.count_nonzero(strong.photo[:, 48:, 0] > 30)
+    assert near_strong / max(far_strong, 1) > near_mild / max(far_mild, 1)
+
+
+def test_far_surfaces_are_denser_and_shaded_from_depth():
+    disparity = np.zeros((60, 80), dtype=np.float32)
+    disparity[:, :40] = 1.0
+    rgb = np.zeros((60, 80, 3), dtype=np.uint8)
+    rgb[:, :40] = (255, 0, 0)
+    result = reconstruct(disparity, rgb, _settings(max_points=2400, density=1))
+    near = result.xyz[:, 2] < 1.5
+    far = result.xyz[:, 2] > 2.5
+    assert far.sum() > near.sum() * 2
+    assert np.all(result.rgb[:, 0] == result.rgb[:, 1])
+    assert np.all(result.rgb[:, 1] == result.rgb[:, 2])
+    assert result.rgb[near].mean() > result.rgb[far].mean() + 100
+    assert not np.any((result.rgb == (255, 0, 0)).all(axis=1))
 
 
 def test_rejects_far_closer_than_near():

@@ -35,13 +35,15 @@ Open3D 在 Apple Silicon 上还需要 Homebrew 的 libusb。安装脚本会在�
 
 使用 Depth Anything 作者发布在 Hugging Face 上的官方 V2 模型：
 
-| 界面选项 | 模型 |
-| --- | --- |
-| Small | `depth-anything/Depth-Anything-V2-Small-hf` |
-| Base | `depth-anything/Depth-Anything-V2-Base-hf` |
-| Large | `depth-anything/Depth-Anything-V2-Large-hf` |
+| 界面选项 | 模型 | 适合看什么 |
+| --- | --- | --- |
+| V2 Small | `depth-anything/Depth-Anything-V2-Small-hf` | 整体体积，最快 |
+| V2 Base | `depth-anything/Depth-Anything-V2-Base-hf` | 更清楚的形体 |
+| V2 Large | `depth-anything/Depth-Anything-V2-Large-hf` | 这组里最清楚的形体，头和喙更完整 |
 
-默认用 Small。第一次点击 Generate Depth 时会下载 Small 权重，大约一百兆，缓存在 `backend/models/hf/`。这个目录不会进 Git。Base 和 Large 只在你手动选择后才会下载，内存占用也更高。
+默认用 V2 Small。要看清主体轮廓时选 V2 Large。第一次点击 Generate Depth 时会下载对应权重，缓存在 `backend/models/hf/`。这个目录不会进 Git。
+
+Depth Pro 和 Cooperate 已从界面移除。在这台机器上，Depth Pro 的深度不跟着照片走，混进结果后会把原来的形体抹成另一张图。
 
 下载失败时程序会报错，不会用假的深度图代替。
 
@@ -58,12 +60,12 @@ Open3D 在 Apple Silicon 上还需要 Homebrew 的 libusb。安装脚本会在�
 1. 把 JPG、JPEG 或 PNG 拖进左侧，或点击选择文件。原图会立刻显示。
 2. 选择模型。日常使用 Small。
 3. 点击 **Generate Depth**。这一步才会运行 AI。换照片或更换模型后需要再点一次。
-4. 点击 **Generate Point Cloud**。中间视窗出现彩色点云。
-5. 拖拽旋转，滚轮缩放，右键拖拽平移。**Reset view** 和 **Fit** 把相机回到正面并框住点云。可切换透视和正交。
-6. 右侧滑杆会立刻重建预览，不会重新跑模型。Depth Strength、Virtual Near、Virtual Far、Invert Depth、Depth Smoothing、Point Density、Maximum Points 和 Camera FOV 会改变点的位置或采样。Point Size、Point Opacity 和背景色只改变显示。
-7. 导出：
+4. 点击 **Generate Point Cloud**。中间出现一张平面的点云照片，不是可以旋转的三维模型。近处的点更大、更亮，远处的点更小、更暗、更密。
+5. 右侧滑杆会立刻重画这张照片，不会重新跑模型。Dot Contrast 拉大近处大圆点和远处小圆点的差别。Dot Color 改圆点颜色，Background 改背景。圆点是圆的，近处更大更亮，远处更小更暗，默认密度大约是之前的三到四倍。
+6. 导出：
    - **Download 16-bit Depth PNG**：单通道 uint16 相对视差，文件名 `depth_16bit.png`
-   - **Download PLY**：带 XYZ 和 RGB 的 `pointcloud.ply`。Open3D 写出的坐标是 double，颜色是 uchar，CloudCompare 和 Blender 可以打开
+   - **Download Point Photo**：平面点云照片 `pointcloud.png`。点的位置还在原图像素上，大小和深浅表示远近
+   - **Download PLY**：带 XYZ 和黑白深浅的 `pointcloud.ply`。Open3D 写出的坐标是 double，颜色是 uchar，CloudCompare 和 Blender 可以打开
    - **Download XYZ**：ASCII `x y z r g b`
    - **Download All Results**：上面的文件，加上 `depth_preview.png`、`metadata.json` 和 `project_settings.json`
 
@@ -83,9 +85,11 @@ X = (u - cx) * Z / fx
 Y = -(v - cy) * Z / fy
 ```
 
-虚拟相机是针孔模型，FOV 为垂直视角，像素为正方形。每个点对应一个可见像素，颜色来自原图。不会为遮挡后面的表面编造点。
+最后看到的点云是一张二维照片。每个点仍落在原图的像素位置上，不会把画面拉成立体模型。近处的点更大、更亮、更疏，远处的点更小、更暗、更密，体积靠大小和深浅来看。点的颜色与照片无关。PLY 里仍保留虚拟的针孔坐标，方便需要坐标的软件打开，但页面上展示的是这张平面照片。
 
-如果模型输出的深度比照片小，会用双三次插值放大到照片分辨率，并限制在模型原始数值范围内。这只是对齐分辨率，不会制造真实的高频几何。Depth Smoothing 大于 0 时，用照片做引导滤波，让深度边界靠近图像边缘；默认关闭，避免把树叶和窗框抹平。
+Generate Depth 会把模型输出整理成前后顺序：物体内部的细碎起伏被压平，物体边缘不再是断层，而是一段朝向或远离相机的渐变。16 位 PNG 保存的就是这张整理后的相对视差，数值越大仍然表示越近。
+
+如果模型输出的深度比照片小，会用双三次插值放大到照片分辨率，并限制在模型原始数值范围内。这只是对齐分辨率，不会制造真实的高频几何。Depth Smoothing 大于 0 时，只对深度图再做一次模糊，不读取照片颜色。
 
 预览默认最多 50 万个点。Full HD 原图和完整深度会保留，把 Maximum Points 调高后可以导出更密的云。1080p 全像素大约 200 万点，上限是 300 万。
 

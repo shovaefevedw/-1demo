@@ -25,7 +25,7 @@ mkdir -p "$HF_HOME" "$ROOT/data/jobs"
   --reload-dir "$ROOT/backend/app" &
 BACK=$!
 
-npm --prefix "$ROOT/frontend" run dev -- --host 127.0.0.1 --port 5173 &
+npm --prefix "$ROOT/frontend" run dev -- --host :: --port 5173 &
 FRONT=$!
 
 cleanup() {

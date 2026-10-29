@@ -9,10 +9,12 @@ from __future__ import annotations
 import time
 from datetime import datetime, timezone
 
+import numpy as np
+
 from app.config import MODEL_IDS
 from app.services.depth_estimator import DepthEstimator
-from app.services.depth_processing import normalize_to_uint16
-from app.services.exporting import write_ply, write_xyz
+from app.services.depth_processing import normalize_to_uint16, shape_front_back_order
+from app.services.exporting import write_ply, write_point_photo, write_xyz
 from app.services.jobs import JobStore
 from app.services.reconstruction import CameraSettings, pack_preview, reconstruct
 
@@ -26,7 +28,10 @@ class PhotoPipeline:
         started = time.perf_counter()
         rgb = self.store.load_rgb(job_id)
         prediction = self.estimator.estimate(rgb, variant)
-        depth_u16, normalization = normalize_to_uint16(prediction.disparity)
+        raw = prediction.disparity
+        finite = np.isfinite(raw)
+        ordered = shape_front_back_order(raw)
+        depth_u16, normalization = normalize_to_uint16(ordered)
         previous = self.store.metadata(job_id)
         metadata = {
             **previous,
@@ -36,8 +41,8 @@ class PhotoPipeline:
             "quantity": "relative_disparity",
             "units": "unitless_relative_not_meters",
             "depth_orientation": "higher_value_means_closer",
-            "original_prediction_min": normalization["source_min"],
-            "original_prediction_max": normalization["source_max"],
+            "original_prediction_min": float(np.min(raw[finite])) if np.any(finite) else None,
+            "original_prediction_max": float(np.max(raw[finite])) if np.any(finite) else None,
             "normalization": normalization,
             "depth_processing": {
                 "model_output_height": prediction.model_height,
@@ -45,9 +50,11 @@ class PhotoPipeline:
                 "upsampled_to_height": int(rgb.shape[0]),
                 "upsampled_to_width": int(rgb.shape[1]),
                 "upsample": "bicubic_clamped_to_model_range",
+                "ordering": "front_back_order_with_local_detail",
                 "note": (
-                    "The depth map is resized to the photograph. "
-                    "Resizing does not add true geometric detail."
+                    "The stored depth keeps front-to-back order. "
+                    "Only silhouette jumps are ramped. "
+                    "Use V2 Large when the subject needs a clearer shape."
                 ),
             },
             "virtual_camera": None,
@@ -55,7 +62,7 @@ class PhotoPipeline:
             "point_count": None,
             "depth_updated_at": _now(),
         }
-        self.store.save_depth(job_id, prediction.disparity, depth_u16, metadata)
+        self.store.save_depth(job_id, ordered, depth_u16, metadata)
         metadata["elapsed_ms"] = int((time.perf_counter() - started) * 1000)
         return metadata
 
@@ -64,7 +71,7 @@ class PhotoPipeline:
         result = self._reconstruct(job_id, settings)
         blob = pack_preview(result)
         info = {
-            "point_count": result.point_count,
+            "point_count": int(result.depth_info.get("photo_points", result.point_count)),
             "elapsed_ms": int((time.perf_counter() - started) * 1000),
             "stride": result.stride,
         }
@@ -74,6 +81,7 @@ class PhotoPipeline:
         started = time.perf_counter()
         result = self._reconstruct(job_id, settings)
         folder = self.store.folder(job_id)
+        write_point_photo(folder / "pointcloud.png", result)
         write_ply(folder / "pointcloud.ply", result)
         write_xyz(folder / "pointcloud.xyz", result)
         metadata = self.store.metadata(job_id)
@@ -112,9 +120,14 @@ def _settings_payload(settings: CameraSettings) -> dict:
         "fov_deg": settings.fov_deg,
         "point_size": settings.point_size,
         "point_opacity": settings.point_opacity,
+        "dot_contrast": settings.dot_contrast,
+        "dot_color": settings.dot_color,
         "background": settings.background,
         "projection": settings.projection,
-        "note": "Virtual distances are scene units, not meters.",
+        "note": (
+            "The point cloud is a flat photograph. "
+            "Nearer dots are larger and lighter; farther dots are smaller, darker, and denser."
+        ),
     }
 
 
@@ -123,6 +136,7 @@ def _file_map(job_id: str) -> dict:
     return {
         "depth_16bit": f"{base}/depth_16bit.png",
         "depth_preview": f"{base}/depth_preview.png",
+        "pointcloud_photo": f"{base}/pointcloud.png",
         "pointcloud_ply": f"{base}/pointcloud.ply",
         "pointcloud_xyz": f"{base}/pointcloud.xyz",
         "metadata": f"{base}/metadata.json",

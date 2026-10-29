@@ -9,7 +9,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, Response
 
-from app.config import ALLOWED_EXPORTS, ALLOWED_SUFFIXES, MAX_UPLOAD_BYTES, MODEL_IDS
+from app.config import ALLOWED_EXPORTS, ALLOWED_SUFFIXES, MAX_UPLOAD_BYTES, VARIANTS
 from app.services.depth_estimator import get_estimator
 from app.services.images import ImageLoadError, load_rgb_bytes
 from app.services.jobs import ExportNotFoundError, JobNotFoundError, get_store
@@ -28,7 +28,7 @@ async def create_depth(
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in ALLOWED_SUFFIXES:
         raise HTTPException(status_code=400, detail="Use a JPG, JPEG, or PNG photograph.")
-    if model not in MODEL_IDS:
+    if model not in VARIANTS:
         raise HTTPException(status_code=400, detail="Model must be small, base, or large.")
     data = await file.read()
     if len(data) > MAX_UPLOAD_BYTES:
@@ -79,7 +79,7 @@ async def preview_cloud(body: dict) -> Response:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return Response(
         content=blob,
-        media_type="application/octet-stream",
+        media_type="image/png",
         headers={
             "X-Point-Count": str(info["point_count"]),
             "X-Elapsed-Ms": str(info["elapsed_ms"]),
@@ -144,10 +144,12 @@ def _settings(body: dict) -> CameraSettings:
             smoothing=float(pick("smoothing", 0.0)),
             density=float(pick("density", 1.0)),
             max_points=int(pick("max_points", 500_000)),
-            color_mode=str(pick("color_mode", "rgb")),
+            color_mode=str(pick("color_mode", "depth")),
             fov_deg=float(pick("fov_deg", 55.0)),
             point_size=float(pick("point_size", 2.0)),
             point_opacity=float(pick("point_opacity", 1.0)),
+            dot_contrast=float(pick("dot_contrast", 1.0)),
+            dot_color=str(pick("dot_color", "#ffffff")),
             background=str(pick("background", "#101114")),
             projection=str(pick("projection", "perspective")),
         ).validated()

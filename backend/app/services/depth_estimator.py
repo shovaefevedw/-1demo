@@ -17,7 +17,7 @@ import torch
 import torch.nn.functional as F
 from PIL import Image
 
-from app.config import MODEL_IDS
+from app.config import MODEL_IDS, VARIANTS
 from app.services.device import device_order
 
 logger = logging.getLogger(__name__)
@@ -43,7 +43,7 @@ class DepthEstimator:
         self._force_cpu = False
 
     def estimate(self, rgb: np.ndarray, variant: str) -> DepthPrediction:
-        if variant not in MODEL_IDS:
+        if variant not in VARIANTS:
             raise ValueError("Model must be small, base, or large.")
         with self._lock:
             try:
@@ -68,7 +68,7 @@ class DepthEstimator:
             outputs = model(**inputs)
         predicted = getattr(outputs, "predicted_depth", None)
         if predicted is None:
-            raise RuntimeError("Depth Anything V2 did not return a depth prediction.")
+            raise RuntimeError(f"{model_id} did not return a depth prediction.")
         raw = predicted.detach().float().cpu()
         if raw.ndim == 2:
             raw = raw.unsqueeze(0)
@@ -76,7 +76,7 @@ class DepthEstimator:
         model_width = int(raw.shape[-1])
         full = _upsample(raw, rgb.shape[0], rgb.shape[1])
         if not np.isfinite(full).any():
-            raise RuntimeError("Depth Anything V2 returned no finite depth values.")
+            raise RuntimeError(f"{model_id} returned no finite depth values.")
         return DepthPrediction(
             disparity=full,
             model_height=model_height,

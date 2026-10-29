@@ -21,7 +21,11 @@ const GEOMETRY_KEYS: (keyof Settings)[] = [
   "density",
   "maxPoints",
   "colorMode",
-  "fov",
+  "pointSize",
+  "opacity",
+  "dotContrast",
+  "dotColor",
+  "background",
 ];
 
 export default function App() {
@@ -31,10 +35,10 @@ export default function App() {
   const [model, setModel] = useState<ModelName>("small");
   const [job, setJob] = useState<DepthJob | null>(null);
   const [settings, setSettings] = useState<Settings>(defaultSettings);
-  const [positions, setPositions] = useState<Float32Array | null>(null);
-  const [colors, setColors] = useState<Float32Array | null>(null);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [pointCount, setPointCount] = useState(0);
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
-  const [fitToken, setFitToken] = useState(0);
+  const photoUrlRef = useRef<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -46,6 +50,10 @@ export default function App() {
   useEffect(() => {
     fetchHealth().then(setHealth).catch(() => setHealth(null));
   }, []);
+
+  useEffect(() => {
+    if (model !== "small" && model !== "base" && model !== "large") setModel("large");
+  }, [model]);
 
   useEffect(() => {
     const prevent = (event: DragEvent) => event.preventDefault();
@@ -67,13 +75,13 @@ export default function App() {
     if (!job || !cloudReady) return;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      void refreshCloud(controller.signal, false);
+      void refreshCloud(controller.signal);
     }, 120);
     return () => {
       window.clearTimeout(timer);
       controller.abort();
     };
-    // Geometry sliders rebuild the cloud. Point size, opacity, and background do not.
+    // Depth, density, dot size, and background rebuild the flat photograph.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [job?.jobId, cloudReady, ...GEOMETRY_KEYS.map((key) => settings[key])]);
 
@@ -90,8 +98,8 @@ export default function App() {
     setPreviewUrl(url);
     setJob(null);
     setCloudReady(false);
-    setPositions(null);
-    setColors(null);
+    replacePhoto(null);
+    setPointCount(0);
     setError(null);
     const image = new Image();
     image.onload = () => setImageSize({ width: image.naturalWidth, height: image.naturalHeight });
@@ -103,8 +111,8 @@ export default function App() {
     setBusy(true);
     setError(null);
     setCloudReady(false);
-    setPositions(null);
-    setColors(null);
+    replacePhoto(null);
+    setPointCount(0);
     try {
       const next = await estimateDepth(file, model);
       setJob(next);
@@ -115,7 +123,7 @@ export default function App() {
     }
   }
 
-  async function refreshCloud(signal?: AbortSignal, fit = false) {
+  async function refreshCloud(signal?: AbortSignal) {
     if (!job) return;
     const id = requestId.current + 1;
     requestId.current = id;
@@ -123,12 +131,14 @@ export default function App() {
     setError(null);
     try {
       const cloud = await fetchPreview(job.jobId, settings, signal ?? new AbortController().signal);
-      if (id !== requestId.current) return;
-      setPositions(cloud.positions);
-      setColors(cloud.colors);
+      if (id !== requestId.current) {
+        URL.revokeObjectURL(cloud.url);
+        return;
+      }
+      replacePhoto(cloud.url);
+      setPointCount(cloud.count);
       setElapsedMs(cloud.elapsedMs);
       setCloudReady(true);
-      if (fit) setFitToken((value) => value + 1);
     } catch (exc) {
       if (signal?.aborted) return;
       if (id !== requestId.current) return;
@@ -154,15 +164,18 @@ export default function App() {
     }
   }
 
+  function replacePhoto(url: string | null) {
+    if (photoUrlRef.current) URL.revokeObjectURL(photoUrlRef.current);
+    photoUrlRef.current = url;
+    setPhotoUrl(url);
+  }
+
   function patchSettings(patch: Partial<Settings>) {
     setSettings((current) => {
       const next = { ...current, ...patch };
       if (next.far <= next.near) next.far = next.near + 0.1;
       return next;
     });
-    if (patch.projection && patch.projection !== settings.projection) {
-      setFitToken((value) => value + 1);
-    }
   }
 
   const modelStale = job != null && job.model !== model;
@@ -191,32 +204,17 @@ export default function App() {
           onFile={chooseFile}
           onModel={setModel}
           onEstimate={() => void generateDepth()}
-          onBuildCloud={() => void refreshCloud(undefined, true)}
+          onBuildCloud={() => void refreshCloud()}
         />
-        <Viewer
-          positions={positions}
-          colors={colors}
-          pointSize={settings.pointSize}
-          opacity={settings.opacity}
-          background={settings.background}
-          projection={settings.projection}
-          fov={settings.fov}
-          fitToken={fitToken}
-          updating={updating}
-          elapsedMs={elapsedMs}
-          onFit={() => setFitToken((value) => value + 1)}
-          onResetCamera={() => setFitToken((value) => value + 1)}
-        />
+        <Viewer photoUrl={photoUrl} pointCount={pointCount} updating={updating} elapsedMs={elapsedMs} />
         <RightPanel
           settings={settings}
           canExport={job != null}
           exporting={exporting}
           onChange={patchSettings}
-          onReset={() => {
-            setSettings(defaultSettings);
-            setFitToken((value) => value + 1);
-          }}
+          onReset={() => setSettings(defaultSettings)}
           onDownloadDepth={() => void saveAndDownload("depth_16bit.png")}
+          onDownloadPhoto={() => void saveAndDownload("pointcloud.png")}
           onDownloadPly={() => void saveAndDownload("pointcloud.ply")}
           onDownloadXyz={() => void saveAndDownload("pointcloud.xyz")}
           onDownloadAll={() => void saveAndDownload("results.zip")}

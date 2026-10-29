@@ -8,7 +8,7 @@ import torch
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import MODEL_IDS
+from app.config import VARIANTS
 from app.routers.api import router
 from app.services.device import preferred_device
 
@@ -33,5 +33,5 @@ def health() -> dict:
         "device": preferred_device(),
         "mps_available": bool(torch.backends.mps.is_available()),
         "torch": torch.__version__,
-        "models": list(MODEL_IDS),
+        "models": list(VARIANTS),
     }

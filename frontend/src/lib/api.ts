@@ -1,4 +1,4 @@
-import type { CloudBuffers, DepthJob, Health, ModelName, Settings } from "./types";
+import type { DepthJob, Health, ModelName, PointPhoto, Settings } from "./types";
 
 export function settingsPayload(jobId: string, settings: Settings) {
   return {
@@ -14,6 +14,8 @@ export function settingsPayload(jobId: string, settings: Settings) {
     fov_deg: settings.fov,
     point_size: settings.pointSize,
     point_opacity: settings.opacity,
+    dot_contrast: settings.dotContrast,
+    dot_color: settings.dotColor,
     background: settings.background,
     projection: settings.projection,
   };
@@ -58,29 +60,11 @@ export async function estimateDepth(file: File, model: ModelName): Promise<Depth
   };
 }
 
-export function parsePreview(buffer: ArrayBuffer): { positions: Float32Array; colors: Float32Array; count: number } {
-  if (buffer.byteLength < 4) throw new Error("The point cloud response was empty.");
-  const view = new DataView(buffer);
-  const count = view.getUint32(0, true);
-  const positionBytes = count * 12;
-  const colorBytes = count * 3;
-  if (buffer.byteLength < 4 + positionBytes + colorBytes) {
-    throw new Error("The point cloud response was incomplete.");
-  }
-  const positions = new Float32Array(buffer.slice(4, 4 + positionBytes));
-  const rawColors = new Uint8Array(buffer, 4 + positionBytes, colorBytes);
-  const colors = new Float32Array(colorBytes);
-  for (let index = 0; index < colorBytes; index += 1) {
-    colors[index] = rawColors[index] / 255;
-  }
-  return { positions, colors, count };
-}
-
 export async function fetchPreview(
   jobId: string,
   settings: Settings,
   signal: AbortSignal,
-): Promise<CloudBuffers> {
+): Promise<PointPhoto> {
   const response = await fetch("/api/preview", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -88,10 +72,13 @@ export async function fetchPreview(
     signal,
   });
   if (!response.ok) throw new Error(await readError(response));
-  const parsed = parsePreview(await response.arrayBuffer());
+  const blob = await response.blob();
+  if (blob.size < 8) throw new Error("The point photograph was empty.");
   const elapsed = response.headers.get("X-Elapsed-Ms");
+  const count = response.headers.get("X-Point-Count");
   return {
-    ...parsed,
+    url: URL.createObjectURL(blob),
+    count: count ? Number(count) : 0,
     elapsedMs: elapsed ? Number(elapsed) : null,
   };
 }

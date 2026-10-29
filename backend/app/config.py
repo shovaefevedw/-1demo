@@ -24,6 +24,7 @@ ALLOWED_SUFFIXES = {".jpg", ".jpeg", ".png"}
 ALLOWED_EXPORTS = {
     "depth_16bit.png",
     "depth_preview.png",
+    "pointcloud.png",
     "pointcloud.ply",
     "pointcloud.xyz",
     "metadata.json",
@@ -36,3 +37,4 @@ MODEL_IDS = {
     "base": "depth-anything/Depth-Anything-V2-Base-hf",
     "large": "depth-anything/Depth-Anything-V2-Large-hf",
 }
+VARIANTS = tuple(MODEL_IDS)

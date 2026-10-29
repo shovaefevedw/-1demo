@@ -31,6 +31,15 @@ def write_preview_png(path: Path, depth_u16: np.ndarray) -> None:
         raise RuntimeError(f"Could not write {path.name}.")
 
 
+def write_point_photo(path: Path, result: Reconstruction) -> None:
+    """Write the flat point photograph. This is the picture, not a 3D file."""
+    if result.photo.ndim != 3 or result.photo.shape[2] != 3:
+        raise ValueError("Point photograph must be an RGB image.")
+    bgr = cv2.cvtColor(result.photo, cv2.COLOR_RGB2BGR)
+    if not cv2.imwrite(str(path), bgr):
+        raise RuntimeError(f"Could not write {path.name}.")
+
+
 def write_ply(path: Path, result: Reconstruction) -> None:
     cloud = o3d.geometry.PointCloud()
     cloud.points = o3d.utility.Vector3dVector(np.ascontiguousarray(result.xyz, dtype=np.float64))

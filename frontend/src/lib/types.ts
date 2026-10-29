@@ -12,6 +12,8 @@ export type Settings = {
   density: number;
   maxPoints: number;
   opacity: number;
+  dotContrast: number;
+  dotColor: string;
   colorMode: ColorMode;
   background: string;
   fov: number;
@@ -28,7 +30,9 @@ export const defaultSettings: Settings = {
   density: 1,
   maxPoints: 500000,
   opacity: 1,
-  colorMode: "rgb",
+  dotContrast: 1,
+  dotColor: "#ffffff",
+  colorMode: "depth",
   background: "#101114",
   fov: 55,
   projection: "perspective",
@@ -46,9 +50,8 @@ export type DepthJob = {
   elapsedMs: number;
 };
 
-export type CloudBuffers = {
-  positions: Float32Array;
-  colors: Float32Array;
+export type PointPhoto = {
+  url: string;
   count: number;
   elapsedMs: number | null;
 };
