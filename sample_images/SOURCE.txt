@@ -1,0 +1,9 @@
+# Sample photograph
+
+`street.jpg` is a 1280×576 excerpt of a street photograph used to test PhotoDepth 3D.
+
+- Title: High-Rises & Streets in Guatemala City - Sidewalks and trees
+- Photographer: Rene Hernandez
+- Source: https://commons.wikimedia.org/wiki/File:High-Rises_%26_Streets_in_Guatemala_City_-_Sidewalks_and_trees.jpg
+- License: Creative Commons Attribution-ShareAlike 2.0
+- License URL: https://creativecommons.org/licenses/by-sa/2.0
